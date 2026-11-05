@@ -4,7 +4,6 @@ import { mkdtemp, readFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
-export const runtime = "nodejs";
 export const maxDuration = 30;
 
 const VOICES = new Set([
