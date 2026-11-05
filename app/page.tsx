@@ -18,11 +18,11 @@ const SCENARIOS: Scenario[] = [
 ];
 
 const VOICES: { id: VoiceType; label: string; gender: Gender; speaker: string }[] = [
-  { id: "gentle-female", label: "温柔女声", gender: "female", speaker: "zh_female_xiaohe_uranus_bigtts" },
-  { id: "cool-female", label: "霸道御姐", gender: "female", speaker: "zh_female_vv_uranus_bigtts" },
-  { id: "cute-female", label: "可爱软妹", gender: "female", speaker: "saturn_zh_female_keainvsheng_tob" },
-  { id: "deep-male", label: "低沉男声", gender: "male", speaker: "zh_male_m191_uranus_bigtts" },
-  { id: "gentle-male", label: "温柔男声", gender: "male", speaker: "zh_male_taocheng_uranus_bigtts" },
+  { id: "gentle-female", label: "温柔女声", gender: "female", speaker: "zh-CN-XiaoxiaoNeural" },
+  { id: "cool-female", label: "霸道御姐", gender: "female", speaker: "zh-CN-XiaoyiNeural" },
+  { id: "cute-female", label: "可爱软妹", gender: "female", speaker: "zh-CN-XiaoyiNeural" },
+  { id: "deep-male", label: "低沉男声", gender: "male", speaker: "zh-CN-YunjianNeural" },
+  { id: "gentle-male", label: "温柔男声", gender: "male", speaker: "zh-CN-YunxiNeural" },
 ];
 
 const clamp = (value: number) => Math.max(-50, Math.min(100, value));
@@ -73,20 +73,40 @@ export default function Home() {
   const [playingId, setPlayingId] = useState<string | null>(null);
   const busyRef = useRef(false);
   const chatEndRef = useRef<HTMLDivElement>(null);
+  const audioRef = useRef<HTMLAudioElement | null>(null);
   const partnerLabel = gender === "female" ? "她" : "他";
   const selectedVoice = useMemo(() => VOICES.find((voice) => voice.id === voiceType) ?? VOICES[0], [voiceType]);
 
-  const speak = useCallback((message: Message) => {
-    if (typeof window === "undefined" || !("speechSynthesis" in window)) return;
-    window.speechSynthesis.cancel();
-    const utterance = new SpeechSynthesisUtterance(cleanTextForSpeech(message.content));
-    utterance.lang = "zh-CN";
-    utterance.rate = 0.95;
-    utterance.onstart = () => setPlayingId(message.id);
-    utterance.onend = () => setPlayingId(null);
-    utterance.onerror = () => setPlayingId(null);
-    window.speechSynthesis.speak(utterance);
-  }, []);
+  const speak = useCallback(async (message: Message) => {
+    if (typeof window === "undefined") return;
+    window.speechSynthesis?.cancel();
+    audioRef.current?.pause();
+    if (audioRef.current?.src.startsWith("blob:")) URL.revokeObjectURL(audioRef.current.src);
+    setPlayingId(message.id);
+    try {
+      const response = await fetch("/api/tts", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ text: cleanTextForSpeech(message.content), voice: selectedVoice.speaker }),
+      });
+      if (!response.ok) throw new Error("Edge TTS unavailable");
+      const audioUrl = URL.createObjectURL(await response.blob());
+      const audio = new Audio(audioUrl);
+      audioRef.current = audio;
+      audio.onended = () => { URL.revokeObjectURL(audioUrl); setPlayingId(null); };
+      audio.onerror = () => { URL.revokeObjectURL(audioUrl); setPlayingId(null); };
+      await audio.play();
+    } catch (error) {
+      console.warn("Edge TTS failed; using browser speech synthesis:", error);
+      if (!("speechSynthesis" in window)) { setPlayingId(null); return; }
+      const utterance = new SpeechSynthesisUtterance(cleanTextForSpeech(message.content));
+      utterance.lang = "zh-CN";
+      utterance.rate = 0.95;
+      utterance.onend = () => setPlayingId(null);
+      utterance.onerror = () => setPlayingId(null);
+      window.speechSynthesis.speak(utterance);
+    }
+  }, [selectedVoice]);
 
   const generateRound = useCallback(async (history: Message[], nextStep: number, score: number, isOver = false, won = false) => {
     setLoading(true);
@@ -140,6 +160,7 @@ export default function Home() {
     if (busyRef.current || loading || screen !== "game") return;
     busyRef.current = true;
     window.speechSynthesis?.cancel();
+    audioRef.current?.pause();
     setPlayingId(null);
     const nextScore = clamp(affection + option.score);
     const userMessage: Message = { id: `user-${step}-${Date.now()}`, role: "user", content: option.content };
@@ -178,6 +199,7 @@ export default function Home() {
 
   const restart = () => {
     window.speechSynthesis?.cancel();
+    audioRef.current?.pause();
     setScreen("start");
     setMessages([]);
     setOptions([]);
