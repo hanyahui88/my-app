@@ -1,7 +1,6 @@
 import { NextResponse } from "next/server";
 import { LLMClient } from "coze-coding-dev-sdk";
 
-export const runtime = "nodejs";
 export const maxDuration = 35;
 
 type ChatMessage = { role: "user" | "partner"; content: string };
@@ -31,7 +30,6 @@ function fallbackReply(input: ChatRequest) {
       ? { partnerMessage: "好啦……我原谅你了。但你要记得今天说的话，下次一定要用行动证明哦。（偷偷牵住你的手）", options: [] }
       : { partnerMessage: "我现在还是很难过，需要一点时间冷静。希望你能认真记住这次的感受。（转过身去）", options: [] };
   }
-  const history = input.messages.map((message) => message.content).join(" ");
   const opening = input.step === 1
     ? `（${partner}抱着手臂，眼眶有点红）${input.scenario} 你现在还有什么想说的吗？`
     : input.affection < 0
@@ -41,7 +39,7 @@ function fallbackReply(input: ChatRequest) {
         : input.affection < 60
           ? "（语气稍微软了一点）哼……你说的我记住了。不过光说好听的可不够。"
           : "（别开脸，小声嘟囔）其实我已经没那么生气了……但你还得给我一个保证。";
-  return { partnerMessage: opening + (history.length > 500 ? "" : ""), options: [...fallbackOptions].sort(() => Math.random() - 0.5) };
+  return { partnerMessage: opening, options: [...fallbackOptions].sort(() => Math.random() - 0.5) };
 }
 
 function parseJson(content: string) {
